@@ -1,0 +1,27 @@
+# Canary: queues one job that only a dispatched worker can run, so the whole
+# path (credential -> secret -> commit -> worker -> job) can be exercised
+# without touching the private repo.
+name: smoke-selfhosted
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 15
+    steps:
+      - name: Report where I ran
+        run: |
+          echo "runner name: $RUNNER_NAME"
+          echo "runner os:   $RUNNER_OS"
+          uname -a
+          echo "workspace:   $GITHUB_WORKSPACE"
+      - name: Prove egress
+        run: |
+          curl -s --max-time 20 -o /dev/null -w "github api: %{http_code}\n" https://api.github.com/zen
+          curl -s --max-time 20 -o /dev/null -w "egress exit ip: %{http_code}\n" https://api.ipify.org
+          echo "egress ip: $(curl -s --max-time 20 https://api.ipify.org || echo unknown)"

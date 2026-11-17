@@ -228,7 +228,6 @@ func (c *Config) validate() error {
 	req(!c.Webhook.Enabled || c.Webhook.Secret != "", "webhook.secret is required when webhook is enabled")
 	req(c.GitHub.SourceRepo != "" && strings.Contains(c.GitHub.SourceRepo, "/"), "github.source_repo must be owner/name")
 	req(c.GitHub.TriggerRepo != "" && strings.Contains(c.GitHub.TriggerRepo, "/"), "github.trigger_repo must be owner/name")
-	req(c.GitHub.SourceRepo != c.GitHub.TriggerRepo, "source_repo and trigger_repo must differ")
 	hasApp := c.GitHub.App.AppID != ""
 	req(c.GitHub.Token != "" || hasApp, "set github.token or github.app")
 	if hasApp {
