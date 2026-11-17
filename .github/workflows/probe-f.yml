@@ -1,0 +1,19 @@
+name: probe-f
+
+on:
+  workflow_dispatch:
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - id: plan
+        run: echo "count=0" >> "$GITHUB_OUTPUT"
+  worker:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "hello"

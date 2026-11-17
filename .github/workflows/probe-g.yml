@@ -1,0 +1,11 @@
+name: probe-g
+
+on:
+  workflow_dispatch:
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - run: echo "hello"
