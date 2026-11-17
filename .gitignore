@@ -1,6 +1,8 @@
-/proxmox-runner
-/proxmox-runner.exe
+/oak-runner-controller
+/oak-runner-controller.exe
+/dist/
 /config.yaml
+/env
 /state.json
 /state.json.tmp
 *.pem
