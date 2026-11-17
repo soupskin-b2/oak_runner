@@ -64,18 +64,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     # GitHub cancels hosted jobs at 6h; stay just under it.
     timeout-minutes: 355
-    env:
-      # All egress, including the runner's own connection, goes through the
-      # controller so third parties see that host rather than GitHub's network.
-      HTTPS_PROXY: ${{ secrets.OAK_PROXY_URL }}
-      HTTP_PROXY: ${{ secrets.OAK_PROXY_URL }}
-      https_proxy: ${{ secrets.OAK_PROXY_URL }}
-      http_proxy: ${{ secrets.OAK_PROXY_URL }}
     steps:
-      - name: Load credentials
+      - name: Load credentials and proxy
         shell: bash
         env:
           DISPATCH: ${{ secrets.OAK_DISPATCH }}
+          PROXY: ${{ secrets.OAK_PROXY_URL }}
           IDX: ${{ matrix.idx }}
         run: |
           set -euo pipefail
@@ -88,6 +82,13 @@ jobs:
           echo "::add-mask::$jit"
           echo "OAK_JIT=$jit" >> "$GITHUB_ENV"
           echo "OAK_RUNNER_NAME=$name" >> "$GITHUB_ENV"
+          # Exported at runtime, not as YAML env: GitHub rejects workflows that
+          # declare the same key in two cases (HTTPS_PROXY and https_proxy).
+          if [[ -n "${PROXY:-}" ]]; then
+            for n in HTTPS_PROXY HTTP_PROXY https_proxy http_proxy; do
+              echo "$n=$PROXY" >> "$GITHUB_ENV"
+            done
+          fi
           echo "Worker $name on ${{ matrix.os }}"
 
       - name: Start runner
@@ -107,7 +108,7 @@ jobs:
           mkdir -p "$work"
           cd "$work"
           url="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-${pkg}-${arch}-${RUNNER_VERSION}.tar.gz"
-          echo "Downloading $url"
+          echo "Downloading (proxy: ${HTTPS_PROXY:+set}${HTTPS_PROXY:-unset})"
           curl -fsSL -o runner.tar.gz "$url"
           tar xzf runner.tar.gz
           rm -f runner.tar.gz

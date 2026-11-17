@@ -1,0 +1,12 @@
+name: probe-i
+
+on:
+  workflow_dispatch:
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    env:
+      HTTPS_PROXY: ${{ secrets.OAK_PROXY_URL }}
+    steps:
+      - run: echo "hello"
