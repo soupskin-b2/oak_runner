@@ -1,0 +1,15 @@
+[Unit]
+Description=Oak runner controller (GitHub Actions worker dispatcher)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/oak-runner-controller
+ExecStart=%h/oak-runner-controller/oak-runner-controller -config %h/oak-runner-controller/config.yaml
+EnvironmentFile=%h/oak-runner-controller/env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,78 @@
+# ${VAR} references are expanded from the environment.
+
+listen: ":8090"
+state_file: /home/max/oak-runner-controller/state.json
+
+# Job discovery on the private source repo. Enable one or both.
+webhook:
+  enabled: false
+  path: /webhook
+  secret: ${WEBHOOK_SECRET}
+
+poll:
+  enabled: true
+  interval: 15s
+
+github:
+  api_url: https://api.github.com
+  # Private repo whose queued jobs get executed.
+  source_repo: soupskin-b2/oak
+  # Public repo whose Actions provide the worker machines.
+  trigger_repo: soupskin-b2/oak_runner
+  runner_group_id: 1
+
+  # Either a token with access to both repos...
+  token: ${GITHUB_TOKEN}
+  # ...or a GitHub App installed on both. Remove `token` when using this.
+  # app:
+  #   app_id: "123456"
+  #   installation_id: 7890123
+  #   private_key_path: /home/max/oak-runner-controller/app.pem
+
+dispatch:
+  # Worker credentials. Written as a repo secret, never as a file.
+  secret_name: OAK_DISPATCH
+  # Committed to the trigger repo; the change starts the workflow.
+  trigger_file: .trigger/dispatch
+  commit_message: "ci: start {count} worker(s) [{nonce}]"
+  author_name: oak-runner-controller
+  author_email: oak-runner-controller@users.noreply.github.com
+
+  # Wait after writing the secret so the workflow reads the new value.
+  secret_settle: 5s
+  # actions/runner release the workers download.
+  runner_version: "2.329.0"
+
+  name_prefix: oak-
+  extra_labels: []
+  # Upper bound on workers in flight at once.
+  max_legs: 4
+  leg_ttl: 6h
+  pending_job_ttl: 10m
+  reconcile_interval: 15s
+  failure_backoff: 1m
+
+  # A job is assigned to the platform whose label it requests.
+  # runner_os is the GitHub-hosted runner label used by the worker workflow.
+  platforms:
+    - name: linux
+      label: linux
+      runner_os: ubuntu-latest
+    - name: windows
+      label: windows
+      runner_os: windows-latest
+    - name: macos
+      label: macos
+      runner_os: macos-latest
+
+# Workers send all egress through this host. Requires credentials, and it only
+# tunnels to public addresses.
+proxy:
+  enabled: true
+  # Plain HTTP so no certificate is needed; the password is therefore sent in
+  # the clear on every request. Use a long random value.
+  addr: ":3128"
+  public_url: http://74.208.108.99:3128
+  user: oak
+  pass: ${PROXY_PASSWORD}
+  secret_name: OAK_PROXY_URL

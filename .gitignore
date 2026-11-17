@@ -1,0 +1,7 @@
+/proxmox-runner
+/proxmox-runner.exe
+/config.yaml
+/state.json
+/state.json.tmp
+*.pem
+.oak/

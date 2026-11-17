@@ -1,0 +1,35 @@
+# Builds the controller. Runs on GitHub-hosted runners and never touches the
+# source repo, so it cannot loop with the dispatch workflow.
+name: controller
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".trigger/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          check-latest: true
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: |
+          go build -trimpath -ldflags "-s -w" -o dist/oak-runner-controller-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o dist/oak-runner-controller-linux-arm64 .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oak-runner-controller
+          path: dist/
+          if-no-files-found: error

@@ -1,0 +1,121 @@
+# Starts GitHub-hosted workers that execute jobs belonging to the private source
+# repo. The controller bumps .trigger/dispatch and writes the credentials into
+# the OAK_DISPATCH secret; this workflow turns them into machines.
+name: oak-worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".trigger/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oak-worker
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        shell: bash
+        env:
+          DISPATCH: ${{ secrets.OAK_DISPATCH }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DISPATCH:-}" ]]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "No dispatch payload; nothing to do." >&2
+            exit 0
+          fi
+          if ! count=$(jq 'length' <<<"$DISPATCH" 2>/dev/null); then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "Dispatch payload is not valid JSON; ignoring." >&2
+            exit 0
+          fi
+          # Only shape goes into the matrix. The credentials stay in the secret.
+          matrix=$(jq -c '[to_entries[] | {idx: .key, os: .value.os, v: .value.v}]' <<<"$DISPATCH")
+          {
+            echo "count=$count"
+            echo "matrix=$matrix"
+          } >> "$GITHUB_OUTPUT"
+          echo "Dispatching $count worker(s)."
+
+  worker:
+    # Each worker registers as a single-use runner for the source repo, runs one
+    # job, then exits and is deregistered by GitHub.
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    # GitHub cancels hosted jobs at 6h; stay just under it.
+    timeout-minutes: 355
+    env:
+      # All egress, including the runner's own connection, goes through the
+      # controller so third parties see that host rather than GitHub's network.
+      HTTPS_PROXY: ${{ secrets.OAK_PROXY_URL }}
+      HTTP_PROXY: ${{ secrets.OAK_PROXY_URL }}
+      https_proxy: ${{ secrets.OAK_PROXY_URL }}
+      http_proxy: ${{ secrets.OAK_PROXY_URL }}
+    steps:
+      - name: Load credentials
+        shell: bash
+        env:
+          DISPATCH: ${{ secrets.OAK_DISPATCH }}
+          IDX: ${{ matrix.idx }}
+        run: |
+          set -euo pipefail
+          jit=$(jq -r --argjson i "$IDX" '.[$i].jit' <<<"$DISPATCH")
+          name=$(jq -r --argjson i "$IDX" '.[$i].name' <<<"$DISPATCH")
+          if [[ -z "$jit" || "$jit" == "null" ]]; then
+            echo "No credentials for this slot; skipping." >&2
+            exit 1
+          fi
+          echo "::add-mask::$jit"
+          echo "OAK_JIT=$jit" >> "$GITHUB_ENV"
+          echo "OAK_RUNNER_NAME=$name" >> "$GITHUB_ENV"
+          echo "Worker $name on ${{ matrix.os }}"
+
+      - name: Start runner
+        shell: bash
+        env:
+          RUNNER_VERSION: ${{ matrix.v }}
+        run: |
+          set -euo pipefail
+          case "$(uname -s)" in
+            Linux)  pkg=linux; arch=x64 ;;
+            Darwin) pkg=osx
+                    if [[ "$(uname -m)" == "arm64" ]]; then arch=arm64; else arch=x64; fi ;;
+            MINGW*|MSYS*|CYGWIN*) pkg=win; arch=amd64 ;;
+            *) echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
+          esac
+          work="$RUNNER_TEMP/oak-runner"
+          mkdir -p "$work"
+          cd "$work"
+          url="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-${pkg}-${arch}-${RUNNER_VERSION}.tar.gz"
+          echo "Downloading $url"
+          curl -fsSL -o runner.tar.gz "$url"
+          tar xzf runner.tar.gz
+          rm -f runner.tar.gz
+          if [[ "$pkg" == "linux" ]]; then
+            ./bin/installdependencies.sh || echo "dependency install reported errors; continuing"
+            ./run.sh --jitconfig "$OAK_JIT"
+          elif [[ "$pkg" == "osx" ]]; then
+            ./run.sh --jitconfig "$OAK_JIT"
+          else
+            cmd.exe //c "run.cmd --jitconfig $OAK_JIT"
+          fi
