@@ -65,14 +65,17 @@ dispatch:
       label: macos
       runner_os: macos-latest
 
-# Workers send all egress through this host. Open only the proxy port in the
-# firewall; the controller API is not exposed.
+# Workers send all egress through this host. Only the proxy port needs to be
+# reachable from the internet; the controller API stays local.
+#
+# Port choice matters on this host: the provider only lets 22, 80, 443 and 8443
+# through, so the proxy lives on 8443. No firewall on the machine itself.
 proxy:
   enabled: true
   # Plain HTTP (no certificate needed). Acceptable because the only accepted
   # sources are GitHub's runner ranges and the password is single-use.
-  addr: ":3128"
-  public_url: http://74.208.108.99:3128
+  addr: ":8443"
+  public_url: http://74.208.108.99:8443
   user: oak
   # Password is generated per dispatch and expires with the workers. The
   # optional `pass` below is a static fallback for manual testing only.
