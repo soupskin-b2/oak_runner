@@ -186,7 +186,7 @@ func (c *Config) applyDefaults() {
 	}
 	def(&d.SecretSettle, 5*time.Second)
 	if d.RunnerVersion == "" {
-		d.RunnerVersion = "2.329.0"
+		d.RunnerVersion = "latest"
 	}
 	if d.NamePrefix == "" {
 		d.NamePrefix = "oak-"

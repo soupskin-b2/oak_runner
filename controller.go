@@ -56,6 +56,9 @@ type Controller struct {
 	legs        map[int64]*Leg // keyed by job ID
 	lastFailure time.Time
 
+	runnerVer     string
+	runnerVerTime time.Time
+
 	kick chan struct{}
 }
 
@@ -294,9 +297,13 @@ func (c *Controller) dispatch(batch []*PendingJob) error {
 			// removed by the reaper.
 			return fmt.Errorf("generate jit config for job %d: %w", p.ID, err)
 		}
+		v, err := c.runnerVersion(ctx)
+		if err != nil {
+			return fmt.Errorf("resolve runner version: %w", err)
+		}
 		specs = append(specs, workerSpec{
 			OS: platform.RunnerOS, JIT: jit.EncodedJITConfig,
-			Name: name, V: c.cfg.Dispatch.RunnerVersion,
+			Name: name, V: v,
 		})
 		legs = append(legs, &Leg{
 			JobID: p.ID, JobName: p.Name, Platform: platform.Name,
@@ -356,6 +363,31 @@ func (c *Controller) dispatch(batch []*PendingJob) error {
 			"worker", leg.RunnerName, "runner_id", leg.RunnerID)
 	}
 	return nil
+}
+
+// runnerVersion returns the actions/runner release the workers should use.
+// "latest" (the default) is resolved from GitHub and cached, because a pinned
+// version eventually stops being accepted: the runner refuses to work once
+// GitHub deprecates it.
+func (c *Controller) runnerVersion(ctx context.Context) (string, error) {
+	cfg := c.cfg.Dispatch.RunnerVersion
+	if cfg != "" && cfg != "latest" {
+		return cfg, nil
+	}
+	if c.runnerVer != "" && time.Since(c.runnerVerTime) < 6*time.Hour {
+		return c.runnerVer, nil
+	}
+	v, err := c.gh.LatestRunnerVersion(ctx)
+	if err != nil {
+		if c.runnerVer != "" {
+			c.log.Warn("resolve latest runner version, using cached", "version", c.runnerVer, "err", err)
+			return c.runnerVer, nil
+		}
+		return "", err
+	}
+	c.runnerVer, c.runnerVerTime = v, time.Now()
+	c.log.Info("runner version resolved", "version", v)
+	return v, nil
 }
 
 func (c *Controller) commit(ctx context.Context, content, message string) error {
@@ -426,6 +458,16 @@ func (c *Controller) reap() {
 		c.finishLeg(ctx, leg)
 	}
 
+	// Registrations created by a failed dispatch never come online.
+	runners, err := c.gh.ListRunners(ctx, c.cfg.GitHub.SourceRepo)
+	if err != nil {
+		c.log.Warn("list runners", "err", err)
+	}
+	runnerByID := make(map[int64]Runner, len(runners))
+	for _, r := range runners {
+		runnerByID[r.ID] = r
+	}
+
 	for _, leg := range check {
 		job, err := c.gh.Job(ctx, c.cfg.GitHub.SourceRepo, leg.JobID)
 		if err != nil {
@@ -439,15 +481,21 @@ func (c *Controller) reap() {
 		if job.Status == "completed" {
 			c.log.Info("job finished, worker released", "job", leg.JobID, "conclusion", job.Conclusion)
 			c.finishLeg(ctx, leg)
+			continue
+		}
+		// The job is still waiting while its worker has gone away: the machine
+		// died, the runner was too old, or registration failed. Release the leg
+		// so the job gets dispatched again instead of waiting until leg_ttl.
+		if job.Status == "queued" && now.Sub(leg.DispatchedAt) > 2*time.Minute {
+			if r, ok := runnerByID[leg.RunnerID]; !ok || r.Status != "online" {
+				c.log.Warn("worker never took its job, releasing it for a retry",
+					"job", leg.JobID, "worker", leg.RunnerName,
+					"age", now.Sub(leg.DispatchedAt).Round(time.Second))
+				c.finishLeg(ctx, leg)
+			}
 		}
 	}
 
-	// Registrations created by a failed dispatch never come online.
-	runners, err := c.gh.ListRunners(ctx, c.cfg.GitHub.SourceRepo)
-	if err != nil {
-		c.log.Warn("list runners", "err", err)
-		return
-	}
 	for _, r := range runners {
 		if !strings.HasPrefix(r.Name, c.cfg.Dispatch.NamePrefix) || r.Status != "offline" || legNames[r.Name] {
 			continue

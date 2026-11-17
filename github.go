@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -328,6 +329,22 @@ func (g *GitHub) CommitFile(ctx context.Context, repo, path, content, sha, messa
 		body["sha"] = sha
 	}
 	return g.do(ctx, http.MethodPut, "/repos/"+repo+"/contents/"+path, body, nil)
+}
+
+// LatestRunnerVersion returns the current actions/runner release, without the
+// leading "v".
+func (g *GitHub) LatestRunnerVersion(ctx context.Context) (string, error) {
+	var out struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := g.do(ctx, http.MethodGet, "/repos/actions/runner/releases/latest", nil, &out); err != nil {
+		return "", err
+	}
+	v := strings.TrimPrefix(out.TagName, "v")
+	if v == "" {
+		return "", errors.New("empty runner version in release response")
+	}
+	return v, nil
 }
 
 func truncate(s string, n int) string {
