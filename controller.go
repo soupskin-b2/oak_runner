@@ -45,10 +45,11 @@ type persistedState struct {
 }
 
 type Controller struct {
-	ctx context.Context
-	cfg *Config
-	gh  *GitHub
-	log *slog.Logger
+	ctx   context.Context
+	cfg   *Config
+	gh    *GitHub
+	proxy *Proxy // nil when the proxy is disabled
+	log   *slog.Logger
 
 	mu          sync.Mutex
 	pending     map[int64]*PendingJob
@@ -58,9 +59,9 @@ type Controller struct {
 	kick chan struct{}
 }
 
-func NewController(ctx context.Context, cfg *Config, gh *GitHub, log *slog.Logger) (*Controller, error) {
+func NewController(ctx context.Context, cfg *Config, gh *GitHub, proxy *Proxy, log *slog.Logger) (*Controller, error) {
 	c := &Controller{
-		ctx: ctx, cfg: cfg, gh: gh, log: log,
+		ctx: ctx, cfg: cfg, gh: gh, proxy: proxy, log: log,
 		pending: map[int64]*PendingJob{},
 		legs:    map[int64]*Leg{},
 		kick:    make(chan struct{}, 1),
@@ -315,9 +316,16 @@ func (c *Controller) dispatch(batch []*PendingJob) error {
 		return fmt.Errorf("write secret: %w", err)
 	}
 	// Workers send all egress through the proxy so third parties see this host.
-	if url := c.cfg.Proxy.WorkerURL(); url != "" {
-		if err := c.gh.SetRepoSecret(ctx, c.cfg.GitHub.TriggerRepo, c.cfg.Proxy.SecretName, url); err != nil {
-			return fmt.Errorf("write proxy secret: %w", err)
+	// The password is unique to this dispatch and expires with the workers, so
+	// a leaked value is worthless after the batch is done.
+	if c.proxy != nil {
+		token := randHex(24)
+		c.proxy.AddCredential(token, c.cfg.Dispatch.LegTTL.Duration+15*time.Minute)
+		url := c.cfg.Proxy.WorkerURL(token)
+		if url != "" {
+			if err := c.gh.SetRepoSecret(ctx, c.cfg.GitHub.TriggerRepo, c.cfg.Proxy.SecretName, url); err != nil {
+				return fmt.Errorf("write proxy secret: %w", err)
+			}
 		}
 	}
 	// Secrets are read by the workflow at run time; give the write a moment to

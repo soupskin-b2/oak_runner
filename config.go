@@ -39,9 +39,16 @@ type ProxyConfig struct {
 	Addr string `yaml:"addr"`
 	// PublicURL is how workers reach the proxy, e.g. http://203.0.113.5:3128.
 	PublicURL string `yaml:"public_url"`
-	// User and Pass authenticate workers. Never run the proxy without them.
+	// User is the basic-auth username. The password is generated per dispatch
+	// by the controller, never stored here.
 	User string `yaml:"user"`
+	// Pass is an optional static password, for manual testing only.
 	Pass string `yaml:"pass"`
+	// AllowGitHubIPs restricts sources to GitHub's published Actions ranges.
+	// Defaults to true; this is the main control against abuse.
+	AllowGitHubIPs *bool `yaml:"allow_github_ips"`
+	// AllowCIDRs adds source ranges, e.g. a test machine.
+	AllowCIDRs []string `yaml:"allow_cidrs"`
 	// SecretName is the trigger repo secret holding the proxy URL.
 	SecretName string `yaml:"secret_name"`
 }
@@ -197,6 +204,10 @@ func (c *Config) applyDefaults() {
 	if c.Proxy.SecretName == "" {
 		c.Proxy.SecretName = "OAK_PROXY_URL"
 	}
+	if c.Proxy.AllowGitHubIPs == nil {
+		yes := true
+		c.Proxy.AllowGitHubIPs = &yes
+	}
 	if len(d.Platforms) == 0 {
 		d.Platforms = []PlatformConfig{
 			{Name: "linux", Label: "linux", RunnerOS: "ubuntu-latest"},
@@ -231,7 +242,7 @@ func (c *Config) validate() error {
 	}
 	req(len(c.Dispatch.Platforms) > 0, "at least one platform is required")
 	if c.Proxy.Enabled {
-		req(c.Proxy.User != "" && c.Proxy.Pass != "", "proxy.user and proxy.pass are required when the proxy is enabled")
+		req(c.Proxy.User != "", "proxy.user is required when the proxy is enabled")
 		req(c.Proxy.PublicURL != "", "proxy.public_url is required when the proxy is enabled")
 	}
 	return errors.Join(errs...)

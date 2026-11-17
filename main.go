@@ -41,7 +41,11 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ctrl, err := NewController(ctx, cfg, gh, log)
+	var px *Proxy
+	if cfg.Proxy.Enabled {
+		px = NewProxy(cfg.Proxy, log)
+	}
+	ctrl, err := NewController(ctx, cfg, gh, px, log)
 	if err != nil {
 		log.Error("init controller", "err", err)
 		os.Exit(1)
@@ -52,10 +56,9 @@ func main() {
 	if cfg.Poll.Enabled {
 		go runPoller(ctx, ctrl, gh, cfg, log)
 	}
-	if cfg.Proxy.Enabled {
-		p := NewProxy(cfg.Proxy, log)
+	if px != nil {
 		go func() {
-			if err := p.Run(ctx); err != nil {
+			if err := px.Run(ctx); err != nil {
 				log.Error("proxy stopped", "err", err)
 			}
 		}()

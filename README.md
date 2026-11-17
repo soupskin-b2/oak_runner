@@ -94,8 +94,8 @@ but concurrent job limits apply (20 on the free plan).
 ## Run the controller
 
 ```sh
-cp config.example.yaml config.yaml     # edit repos, proxy password
-printf 'GITHUB_TOKEN=github_pat_...\nPROXY_PASSWORD=%s\n' "$(openssl rand -hex 24)" > env
+cp config.example.yaml config.yaml     # edit repos, proxy settings
+printf 'GITHUB_TOKEN=github_pat_...\n' > env
 chmod 600 env
 
 GOOS=linux GOARCH=amd64 go build -o oak-runner-controller .
@@ -130,11 +130,19 @@ Endpoints: `GET /healthz`, `GET /status` (pending jobs and live workers as JSON)
   credentials created for jobs that were never served are deleted by the reaper.
 - **Restarts.** `state_file` keeps pending jobs and live workers, so a restart
   does not double-dispatch.
-- **Proxy.** Authenticated, `CONNECT` only on 443/8443/563, plain HTTP only on
-  80/443, and any destination resolving to a private, loopback, link-local or
-  metadata address is refused. The URL is handed to workers as a secret, so the
-  password is transmitted in clear text on each request: use a long random one
-  and rotate it by editing `env` and restarting.
+- **Proxy.** Sends worker egress from this host. Controls, strongest first:
+  - only sources inside GitHub's published Actions ranges are accepted
+    (`allow_github_ips`, refreshed hourly from the meta API)
+  - the password is generated per dispatch and expires with the workers, so it
+    is short-lived even though it travels in clear text
+  - `CONNECT` only to 443/8443/563, plain HTTP only to 80/443
+  - destinations resolving to private, loopback, link-local, CGNAT or metadata
+    addresses are refused
+  - 128 concurrent connections maximum
+
+  Left open: anyone inside GitHub's ranges who also learns the password could
+  relay through the host for the life of one batch. Set `proxy.pass` empty and
+  rotate nothing else; there is no long-term credential to leak.
 
 ## Limits
 

@@ -65,14 +65,19 @@ dispatch:
       label: macos
       runner_os: macos-latest
 
-# Workers send all egress through this host. Requires credentials, and it only
-# tunnels to public addresses.
+# Workers send all egress through this host. Open only the proxy port in the
+# firewall; the controller API is not exposed.
 proxy:
   enabled: true
-  # Plain HTTP so no certificate is needed; the password is therefore sent in
-  # the clear on every request. Use a long random value.
+  # Plain HTTP (no certificate needed). Acceptable because the only accepted
+  # sources are GitHub's runner ranges and the password is single-use.
   addr: ":3128"
   public_url: http://74.208.108.99:3128
   user: oak
-  pass: ${PROXY_PASSWORD}
+  # Password is generated per dispatch and expires with the workers. The
+  # optional `pass` below is a static fallback for manual testing only.
+  # pass: ""
+  allow_github_ips: true
+  # Extra source ranges, e.g. your own workstation: ["203.0.113.9/32"]
+  allow_cidrs: []
   secret_name: OAK_PROXY_URL
