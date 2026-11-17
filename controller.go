@@ -491,7 +491,8 @@ func (c *Controller) reap() {
 		// The job is still waiting while its worker has gone away: the machine
 		// died, the runner was too old, or registration failed. Release the leg
 		// so the job gets dispatched again instead of waiting until leg_ttl.
-		if job.Status == "queued" && now.Sub(leg.DispatchedAt) > 2*time.Minute {
+		// Four minutes covers a cold hosted runner plus the runner download.
+		if job.Status == "queued" && now.Sub(leg.DispatchedAt) > 4*time.Minute {
 			if r, ok := runnerByID[leg.RunnerID]; !ok || r.Status != "online" {
 				c.log.Warn("worker never took its job, releasing it for a retry",
 					"job", leg.JobID, "worker", leg.RunnerName,

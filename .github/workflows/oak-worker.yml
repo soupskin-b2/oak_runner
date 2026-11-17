@@ -13,10 +13,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: oak-worker
-  cancel-in-progress: false
-
 jobs:
   plan:
     runs-on: ubuntu-latest
