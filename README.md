@@ -51,6 +51,12 @@ decision for whoever owns the account.
 Controller host: Linux, outbound HTTPS, one free TCP port for the API and one
 for the proxy. No root needed, the proxy removes the need for Squid.
 
+Open only the proxy port (`3128/tcp` by default) inbound. The API port is for
+local use and does not need to be reachable from the internet; if you want
+webhooks instead of polling, route a subdomain or path to it yourself. A
+subdirectory works for the API but never for the proxy, because `CONNECT`
+requests carry a host and port and no path.
+
 Credentials for the controller, usable on **both** repos:
 
 - GitHub App installed on both repos with:
