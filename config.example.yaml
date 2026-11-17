@@ -40,8 +40,9 @@ dispatch:
 
   # Wait after writing the secret so the workflow reads the new value.
   secret_settle: 5s
-  # actions/runner release the workers download.
-  runner_version: "2.329.0"
+  # actions/runner release the workers download. "latest" is resolved from
+  # GitHub and cached; a pinned version eventually stops being accepted.
+  runner_version: latest
 
   name_prefix: oak-
   extra_labels: []
@@ -58,12 +59,15 @@ dispatch:
     - name: linux
       label: linux
       runner_os: ubuntu-latest
+      labels: [linux, x64]
     - name: windows
       label: windows
       runner_os: windows-latest
+      labels: [windows, x64]
     - name: macos
       label: macos
       runner_os: macos-latest
+      labels: [macos, arm64]
 
 # Workers send all egress through this host. Only the proxy port needs to be
 # reachable from the internet; the controller API stays local.

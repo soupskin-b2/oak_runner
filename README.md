@@ -73,30 +73,32 @@ by hand: `OAK_DISPATCH` (worker credentials) and `OAK_PROXY_URL` (proxy URL).
 
 ## Source repo setup
 
-The self-hosted runner for `oak` is the controller host. Register it once:
+Nothing to register. The controller never runs a job itself; it only mints
+credentials, so no self-hosted runner needs to exist on this host or anywhere
+else. Do not register another runner with the worker labels, or it will take the
+jobs that the dispatch is meant to run.
 
-```sh
-# on the controller host, as the service user
-mkdir -p ~/oak-worker && cd ~/oak-worker
-curl -fsSL -o r.tar.gz https://github.com/actions/runner/releases/download/v2.329.0/actions-runner-linux-x64-2.329.0.tar.gz
-tar xzf r.tar.gz && ./bin/installdependencies.sh
-./config.sh --url https://github.com/soupskin-b2/oak --token <runner-registration-token>
-./run.sh            # or install it as a service
-```
+A job is picked up when it asks for `self-hosted` plus a platform label
+(`linux`, `windows` or `macos`). The generated runner carries exactly the labels
+it was created with, because a JIT runner is not given `self-hosted` or the OS
+automatically the way `config.sh` does. So the controller builds the set as
+`self-hosted` + the platform's labels + any other labels the job requested.
+A job asking for `[self-hosted, linux, ubuntu-24]` gets a runner labelled
+`self-hosted, linux, x64, ubuntu-24` on an `ubuntu-latest` machine.
 
-Job labels decide the platform. A job runs on a worker when it asks for
-`self-hosted` plus a platform label (`linux`, `windows` or `macos`). Any other
-labels on the job are added to the generated runner, so a job asking for
-`runs-on: [self-hosted, linux, ubuntu-24]` gets a runner labelled `ubuntu-24`
-on an `ubuntu-latest` machine.
-
-Platform labels are cosmetic here: a `windows` job lands on a GitHub-hosted
-Windows machine, so the label must match reality.
+The platform label has to match reality: a `windows` job lands on a GitHub-hosted
+Windows image, so asking for `windows` on a Linux-only label set will not work.
 
 ## Trigger repo setup
 
 `.trigger/dispatch` must exist on `main`. Commits to it are the trigger; the
-worker workflow only runs for paths under `.trigger/`.
+worker workflow only runs for paths under `.trigger/`. Do not add a workflow-level
+`concurrency` group to it: a second dispatch cancels the pending run, and no
+worker ever starts.
+
+`.github/workflows/smoke-selfhosted.yml` is a canary. Run it manually to prove
+the whole path after a change; it queues one job that only a dispatched worker
+can execute and prints the egress address it used.
 
 Each dispatched worker consumes a hosted runner minute. Public repos are free,
 but concurrent job limits apply (20 on the free plan).
