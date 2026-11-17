@@ -1,0 +1,33 @@
+name: probe-c
+
+on:
+  workflow_dispatch:
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - id: plan
+        shell: bash
+        env:
+          DISPATCH: ${{ secrets.OAK_DISPATCH }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DISPATCH:-}" ]]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "No dispatch payload; nothing to do." >&2
+            exit 0
+          fi
+          if ! count=$(jq 'length' <<<"$DISPATCH" 2>/dev/null); then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "Dispatch payload is not valid JSON; ignoring." >&2
+            exit 0
+          fi
+          matrix=$(jq -c '[to_entries[] | {idx: .key, os: .value.os, v: .value.v}]' <<<"$DISPATCH")
+          {
+            echo "count=$count"
+            echo "matrix=$matrix"
+          } >> "$GITHUB_OUTPUT"
+          echo "Dispatching $count worker(s)."

@@ -1,0 +1,44 @@
+name: probe-e
+
+on:
+  workflow_dispatch:
+
+jobs:
+  worker:
+    strategy:
+      matrix:
+        include:
+          - idx: 0
+            os: ubuntu-latest
+            v: "2.329.0"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Start runner
+        shell: bash
+        env:
+          RUNNER_VERSION: ${{ matrix.v }}
+        run: |
+          set -euo pipefail
+          case "$(uname -s)" in
+            Linux)  pkg=linux; arch=x64 ;;
+            Darwin) pkg=osx
+                    if [[ "$(uname -m)" == "arm64" ]]; then arch=arm64; else arch=x64; fi ;;
+            MINGW*|MSYS*|CYGWIN*) pkg=win; arch=amd64 ;;
+            *) echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
+          esac
+          work="$RUNNER_TEMP/oak-runner"
+          mkdir -p "$work"
+          cd "$work"
+          url="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-${pkg}-${arch}-${RUNNER_VERSION}.tar.gz"
+          echo "Downloading $url"
+          curl -fsSL -o runner.tar.gz "$url"
+          tar xzf runner.tar.gz
+          rm -f runner.tar.gz
+          if [[ "$pkg" == "linux" ]]; then
+            ./bin/installdependencies.sh || echo "dependency install reported errors; continuing"
+            ./run.sh --jitconfig "$OAK_JIT"
+          elif [[ "$pkg" == "osx" ]]; then
+            ./run.sh --jitconfig "$OAK_JIT"
+          else
+            cmd.exe //c "run.cmd --jitconfig $OAK_JIT"
+          fi
