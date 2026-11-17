@@ -147,12 +147,17 @@ func (c *Controller) platformFor(jobLabels []string) (*PlatformConfig, []string)
 			custom = append(custom, l)
 		}
 	}
-	if len(custom) == 0 {
-		// Keep at least one custom label; the runner adds self-hosted and the
-		// OS/arch labels of the machine it actually runs on.
-		custom = []string{"oak"}
+	// A JIT runner carries exactly the labels given here: self-hosted and the
+	// OS are not added by the runner itself, so they have to be explicit.
+	labels := []string{"self-hosted"}
+	seen := lowerSet(labels)
+	for _, l := range append(slices.Clone(chosen.Labels), custom...) {
+		if k := strings.ToLower(l); !seen[k] {
+			seen[k] = true
+			labels = append(labels, l)
+		}
 	}
-	return chosen, custom
+	return chosen, labels
 }
 
 func (c *Controller) isSourceRepo(repo string) bool {

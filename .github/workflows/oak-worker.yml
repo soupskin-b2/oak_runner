@@ -113,7 +113,6 @@ jobs:
           tar xzf runner.tar.gz
           rm -f runner.tar.gz
           if [[ "$pkg" == "linux" ]]; then
-            ./bin/installdependencies.sh || echo "dependency install reported errors; continuing"
             ./run.sh --jitconfig "$OAK_JIT"
           elif [[ "$pkg" == "osx" ]]; then
             ./run.sh --jitconfig "$OAK_JIT"

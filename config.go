@@ -94,6 +94,10 @@ type PlatformConfig struct {
 	Label string `yaml:"label"`
 	// RunnerOS is the GitHub-hosted runner label used in the trigger workflow.
 	RunnerOS string `yaml:"runner_os"`
+	// Labels are the runner labels that describe the hosted machine. They must
+	// match what the job asks for, because a JIT runner carries exactly the
+	// labels it was created with: self-hosted and the OS are not added for it.
+	Labels []string `yaml:"labels"`
 }
 
 type DispatchConfig struct {
@@ -213,6 +217,20 @@ func (c *Config) applyDefaults() {
 			{Name: "linux", Label: "linux", RunnerOS: "ubuntu-latest"},
 			{Name: "windows", Label: "windows", RunnerOS: "windows-latest"},
 			{Name: "macos", Label: "macos", RunnerOS: "macos-latest"},
+		}
+	}
+	for i := range d.Platforms {
+		if len(d.Platforms[i].Labels) > 0 {
+			continue
+		}
+		// What the hosted image actually is, so jobs can ask for it.
+		switch d.Platforms[i].Name {
+		case "windows":
+			d.Platforms[i].Labels = []string{"windows", "x64"}
+		case "macos":
+			d.Platforms[i].Labels = []string{"macos", "arm64"}
+		default:
+			d.Platforms[i].Labels = []string{"linux", "x64"}
 		}
 	}
 }
