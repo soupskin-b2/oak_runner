@@ -1,0 +1,31 @@
+# Temporary probe to find the construct the workflow validator rejects.
+name: probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".trigger/probe"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        shell: bash
+        env:
+          DISPATCH: ${{ secrets.OAK_DISPATCH }}
+        run: |
+          echo "count=0" >> "$GITHUB_OUTPUT"
+          echo "matrix=[]" >> "$GITHUB_OUTPUT"
