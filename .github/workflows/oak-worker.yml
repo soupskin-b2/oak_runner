@@ -97,17 +97,24 @@ jobs:
             Linux)  pkg=linux; arch=x64 ;;
             Darwin) pkg=osx
                     if [[ "$(uname -m)" == "arm64" ]]; then arch=arm64; else arch=x64; fi ;;
-            MINGW*|MSYS*|CYGWIN*) pkg=win; arch=amd64 ;;
+            # Windows builds are zips named win-x64 (not tar.gz, not amd64).
+            MINGW*|MSYS*|CYGWIN*) pkg=win; arch=x64 ;;
             *) echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
           esac
+          ext=tar.gz
+          [[ "$pkg" == "win" ]] && ext=zip
           work="$RUNNER_TEMP/oak-runner"
           mkdir -p "$work"
           cd "$work"
-          url="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-${pkg}-${arch}-${RUNNER_VERSION}.tar.gz"
-          echo "Downloading (proxy: ${HTTPS_PROXY:+set}${HTTPS_PROXY:-unset})"
-          curl -fsSL -o runner.tar.gz "$url"
-          tar xzf runner.tar.gz
-          rm -f runner.tar.gz
+          url="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-${pkg}-${arch}-${RUNNER_VERSION}.${ext}"
+          echo "Downloading $(basename "$url") (proxy: ${HTTPS_PROXY:+set}${HTTPS_PROXY:-unset})"
+          curl -fsSL -o "runner.$ext" "$url"
+          if [[ "$ext" == "zip" ]]; then
+            pwsh -NoProfile -Command "Expand-Archive -LiteralPath runner.zip -DestinationPath . -Force"
+          else
+            tar xzf runner.tar.gz
+          fi
+          rm -f "runner.$ext"
           if [[ "$pkg" == "linux" ]]; then
             ./run.sh --jitconfig "$OAK_JIT"
           elif [[ "$pkg" == "osx" ]]; then
